@@ -122,3 +122,259 @@ git push
 ```
 
 **Kabhi bhi apna GitHub token/password chat mein mat likhiye.**# Itfoot
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Switch,
+  FlatList,
+  Alert,
+  TextInput,
+} from "react-native";
+import * as Contacts from "expo-contacts";
+import {
+  loadContacts,
+  addContact,
+  removeContact,
+  getLocationConsent,
+  setLocationConsent,
+} from "../utils/familyStore";
+import { getCurrentLocation, startLiveTracking } from "../utils/location";
+import { sendSOS } from "../utils/sms";
+
+export default function FamilySafetyScreen() {
+  const [contacts, setContacts] = useState([]);
+  const [consent, setConsent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newNumber, setNewNumber] = useState("");
+  const [trackingSub, setTrackingSub] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      setContacts(await loadContacts());
+      setConsent(await getLocationConsent());
+    })();
+    return () => {
+      if (trackingSub) trackingSub.remove();
+    };
+  }, []);
+
+  async function handleAddFromPhonebook() {
+    const { status } = await Contacts.requestPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission chahiye", "Contacts access ke bina number nahi chun sakte.");
+      return;
+    }
+    const { data } = await Contacts.getContactsAsync({
+      fields: [Contacts.Fields.PhoneNumbers],
+    });
+    if (!data.length) {
+      Alert.alert("Koi contact nahi mila");
+      return;
+    }
+    // Simplified: pehla number le lete hain agar maujood ho. Real app mein
+    // yahan ek picker UI dikhega.
+    Alert.alert(
+      "Manually add karein",
+      "Neeche diye box mein naam aur number bharen, phir 'Add' dabayen."
+    );
+  }
+
+  async function handleManualAdd() {
+    if (!newName.trim() || !newNumber.trim()) {
+      Alert.alert("Naam aur number dono bharen");
+      return;
+    }
+    const updated = await addContact({
+      name: newName.trim(),
+      phoneNumber: newNumber.trim(),
+    });
+    setContacts(updated);
+    setNewName("");
+    setNewNumber("");
+  }
+
+  async function handleRemove(phoneNumber) {
+    const updated = await removeContact(phoneNumber);
+    setContacts(updated);
+  }
+
+  async function handleToggleConsent(value) {
+    if (value) {
+      Alert.alert(
+        "Live location sharing",
+        "Aap apni live location apne family members ke saath share karna chahte hain? Yeh aap kabhi bhi band kar sakte hain.",
+        [
+          { text: "Nahi", style: "cancel" },
+          {
+            text: "Haan, share karo",
+            onPress: async () => {
+              await setLocationConsent(true);
+              setConsent(true);
+              try {
+                const sub = await startLiveTracking(() => {});
+                setTrackingSub(sub);
+              } catch (e) {
+                Alert.alert("Permission nahi mili", String(e.message || e));
+                await setLocationConsent(false);
+                setConsent(false);
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      await setLocationConsent(false);
+      setConsent(false);
+      if (trackingSub) {
+        trackingSub.remove();
+        setTrackingSub(null);
+      }
+    }
+  }
+
+  async function handleSOSPress() {
+    if (!contacts.length) {
+      Alert.alert("Pehle emergency contact add karein");
+      return;
+    }
+    setSending(true);
+    try {
+      const loc = await getCurrentLocation();
+      await sendSOS(
+        contacts.map((c) => c.phoneNumber),
+        loc
+      );
+    } catch (e) {
+      Alert.alert("SOS bhejne mein dikkat", String(e.message || e));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>फैमिली सेफ्टी</Text>
+
+      <TouchableOpacity
+        style={styles.sosButton}
+        onPress={handleSOSPress}
+        disabled={sending}
+      >
+        <Text style={styles.sosText}>{sending ? "भेज रहे हैं..." : "SOS"}</Text>
+      </TouchableOpacity>
+      <Text style={styles.sosHint}>
+        Dabate hi saare emergency contacts ko aapki live location SMS se chali jaayegi
+      </Text>
+
+      <View style={styles.consentRow}>
+        <Text style={styles.consentLabel}>लाइव लोकेशन शेयरिंग</Text>
+        <Switch value={consent} onValueChange={handleToggleConsent} />
+      </View>
+      <Text style={styles.consentHint}>
+        {consent
+          ? "Chalu hai - family aapki location dekh sakti hai. Kabhi bhi band karein."
+          : "Band hai - jab tak aap 'Haan' nahi kahenge, location share nahi hogi."}
+      </Text>
+
+      <Text style={styles.sectionTitle}>Emergency Contacts</Text>
+      <FlatList
+        data={contacts}
+        keyExtractor={(item) => item.phoneNumber}
+        style={{ width: "100%" }}
+        renderItem={({ item }) => (
+          <View style={styles.contactRow}>
+            <View>
+              <Text style={styles.contactName}>{item.name}</Text>
+              <Text style={styles.contactNumber}>{item.phoneNumber}</Text>
+            </View>
+            <TouchableOpacity onPress={() => handleRemove(item.phoneNumber)}>
+              <Text style={styles.removeText}>हटाएं</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        ListEmptyComponent={<Text style={styles.emptyText}>Koi contact add nahi kiya gaya</Text>}
+      />
+
+      <View style={styles.addBox}>
+        <TextInput
+          style={styles.input}
+          placeholder="नाम"
+          placeholderTextColor="#888"
+          value={newName}
+          onChangeText={setNewName}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="मोबाइल नंबर"
+          placeholderTextColor="#888"
+          keyboardType="phone-pad"
+          value={newNumber}
+          onChangeText={setNewNumber}
+        />
+        <TouchableOpacity style={styles.addButton} onPress={handleManualAdd}>
+          <Text style={styles.addButtonText}>Add</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#1A1A2E", padding: 20, paddingTop: 50 },
+  title: { color: "#FFFFFF", fontSize: 24, fontWeight: "700", marginBottom: 20 },
+  sosButton: {
+    alignSelf: "center",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#E94560",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  sosText: { color: "#FFF", fontSize: 28, fontWeight: "800" },
+  sosHint: { color: "#AAA", textAlign: "center", marginBottom: 25, fontSize: 13 },
+  consentRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#22223B",
+    padding: 15,
+    borderRadius: 10,
+  },
+  consentLabel: { color: "#FFF", fontSize: 16 },
+  consentHint: { color: "#999", fontSize: 12, marginTop: 6, marginBottom: 20 },
+  sectionTitle: { color: "#FFF", fontSize: 16, fontWeight: "700", marginBottom: 8 },
+  contactRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#22223B",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  contactName: { color: "#FFF", fontSize: 15 },
+  contactNumber: { color: "#999", fontSize: 13 },
+  removeText: { color: "#E94560", fontSize: 13 },
+  emptyText: { color: "#777", textAlign: "center", marginVertical: 10 },
+  addBox: { marginTop: 15 },
+  input: {
+    backgroundColor: "#22223B",
+    color: "#FFF",
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  addButton: {
+    backgroundColor: "#0F9B8E",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  addButtonText: { color: "#FFF", fontWeight: "700" },
+});
