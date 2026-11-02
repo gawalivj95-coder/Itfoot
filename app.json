@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Family Safety Assistant",
+    "slug": "itfoot-family-safety",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1A1A2E"
+    },
+    "android": {
+      "package": "com.itfoot.familysafety",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "READ_CONTACTS",
+        "RECORD_AUDIO",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "POST_NOTIFICATIONS",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Family safety ke liye location zaroori hai. Yeh sirf aapki razaamandi ke baad hi share hogi.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-sms"
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "SOS aur family contacts chunne ke liye contacts access chahiye."
+        }
+      ],
+      [
+        "@react-native-voice/voice"
+      ]
+    ]
+  }
+}
